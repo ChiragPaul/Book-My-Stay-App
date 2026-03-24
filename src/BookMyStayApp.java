@@ -1,134 +1,132 @@
-import java.util.*;
+import java.util.Scanner;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.LinkedList;
+import java.util.Queue;
 
+class InvalidBookingException extends Exception {
 
-
-class RoomAllocationService {
-
-    // Stores all allocated room IDs to prevent duplicates
-    private Set<String> allocatedRoomIds;
-
-
-    private Map<String, Set<String>> assignedRoomsByType;
-
-
-    public RoomAllocationService() {
-        allocatedRoomIds = new HashSet<>();
-        assignedRoomsByType = new HashMap<>();
+    public InvalidBookingException(String message) {
+        super(message);
     }
+}
+
+ class ReservationValidator {
 
 
-    public void allocateRoom(Reservation reservation, RoomInventory inventory) {
+    public void validate(
+            String guestName,
+            String roomType,
+            RoomInventory inventory
+    ) throws InvalidBookingException {
 
-        String roomType = reservation.getRoomType();
-
-        // Check inventory availability
-        if (!inventory.isAvailable(roomType)) {
-            System.out.println("No rooms available for type: " + roomType);
-            return;
+        // Validate guest name
+        if (guestName == null || guestName.trim().isEmpty()) {
+            throw new InvalidBookingException("Guest name cannot be empty.");
         }
 
-        // Generate unique room ID
-        String roomId = generateRoomId(roomType);
+        // Validate room type
+        if (roomType == null) {
+            throw new InvalidBookingException("Room type cannot be null.");
+        }
 
-        // Store globally
-        allocatedRoomIds.add(roomId);
+        // Case-sensitive validation as per requirement
+        if (!roomType.equals("Single") &&
+                !roomType.equals("Double") &&
+                !roomType.equals("Suite")) {
+            throw new InvalidBookingException("Invalid room type selected.");
+        }
 
-        // Store by room type
-        assignedRoomsByType.putIfAbsent(roomType, new HashSet<>());
-        assignedRoomsByType.get(roomType).add(roomId);
+        // Validate inventory availability
+        int availableRooms = inventory.getAvailableRooms(roomType);
 
-        // Update inventory
-        inventory.decrement(roomType);
-
-        // Confirm reservation
-        System.out.println("Booking confirmed for guest: "
-                + reservation.getGuestName()
-                + ", Room ID: " + roomId);
-    }
-
-
-    private String generateRoomId(String roomType) {
-
-        int counter = 1;
-        String roomId;
-
-        do {
-            roomId = roomType + "-" + counter;
-            counter++;
-        } while (allocatedRoomIds.contains(roomId));
-
-        return roomId;
+        if (availableRooms <= 0) {
+            throw new InvalidBookingException(
+                    "No rooms available for selected type: " + roomType
+            );
+        }
     }
 }
 
 
-class Reservation {
-
-    private String guestName;
-    private String roomType;
-
-    public Reservation(String guestName, String roomType) {
-        this.guestName = guestName;
-        this.roomType = roomType;
-    }
-
-    public String getGuestName() {
-        return guestName;
-    }
-
-    public String getRoomType() {
-        return roomType;
-    }
-}
-
-
-class RoomInventory {
-
-    private Map<String, Integer> inventory;
-
-    public RoomInventory() {
-        inventory = new HashMap<>();
-    }
-
-    public void addRoomType(String type, int count) {
-        inventory.put(type, count);
-    }
-
-    public boolean isAvailable(String type) {
-        return inventory.containsKey(type) && inventory.get(type) > 0;
-    }
-
-    public void decrement(String type) {
-        inventory.put(type, inventory.get(type) - 1);
-    }
-}
 
 
 public class BookMyStayApp {
 
     public static void main(String[] args) {
 
-        System.out.println("Room Allocation Processing\n");
+        // Display application header
+        System.out.println("Booking Validation");
 
-        // Initialize inventory
+        Scanner scanner = new Scanner(System.in);
+
+        // Initialize components
         RoomInventory inventory = new RoomInventory();
-        inventory.addRoomType("Single", 2);
-        inventory.addRoomType("Suite", 1);
+        ReservationValidator validator = new ReservationValidator();
+        BookingRequestQueue bookingQueue = new BookingRequestQueue();
 
-        // Booking request queue (FIFO)
-        Queue<Reservation> bookingQueue = new LinkedList<>();
+        try {
+            // Collect input
+            System.out.print("Enter guest name: ");
+            String guestName = scanner.nextLine();
 
-        bookingQueue.add(new Reservation("Abhi", "Single"));
-        bookingQueue.add(new Reservation("Subha", "Single"));
-        bookingQueue.add(new Reservation("Vamathi", "Suite"));
+            System.out.print("Enter room type (Single/Double/Suite): ");
+            String roomType = scanner.nextLine();
 
-        // Allocation service
-        RoomAllocationService allocationService = new RoomAllocationService();
+            // Validate input (fail-fast)
+            validator.validate(guestName, roomType, inventory);
 
-        // Process queue
-        while (!bookingQueue.isEmpty()) {
-            Reservation reservation = bookingQueue.poll();
-            allocationService.allocateRoom(reservation, inventory);
+            // If validation passes
+            System.out.println("Booking request is valid.");
+
+            // (Optional) Add to queue
+            bookingQueue.addRequest(guestName, roomType);
+
+        } catch (InvalidBookingException e) {
+            // Graceful failure handling
+            System.out.println("Booking failed: " + e.getMessage());
+        } finally {
+            scanner.close();
         }
     }
 }
+
+
+
+ class RoomInventory {
+
+    private Map<String, Integer> inventory;
+
+    public RoomInventory() {
+        inventory = new HashMap<>();
+
+        // Initial room counts
+        inventory.put("Single", 2);
+        inventory.put("Double", 2);
+        inventory.put("Suite", 1);
+    }
+
+
+    public int getAvailableRooms(String roomType) {
+        return inventory.getOrDefault(roomType, 0);
+    }
+
+
+    public void bookRoom(String roomType) {
+        int count = getAvailableRooms(roomType);
+        if (count > 0) {
+            inventory.put(roomType, count - 1);
+        }
+    }
+}
+
+
+class BookingRequestQueue {
+
+    private Queue<String> queue = new LinkedList<>();
+
+    public void addRequest(String guestName, String roomType) {
+        queue.offer(guestName + " - " + roomType);
+    }
+}
+
